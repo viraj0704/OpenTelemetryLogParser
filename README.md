@@ -14,7 +14,7 @@ OpenTelemetryLogParser is a log parsing utility for OpenTelemetry logs. It allow
 
 ## Installation
 
-1. Download the **'new_parser.py'** file from this repository.
+1. Download the **'otlpLogParser.py'** file from this repository.
 
 2. Locate the log file ( in txt format ) generated from OpenTelemetry instrumentation. The log file should contain the necessary trace information.
 
@@ -22,7 +22,7 @@ OpenTelemetryLogParser is a log parsing utility for OpenTelemetry logs. It allow
 Run the following command to execute the log parser and generate a JSON file based on trace IDs:
 
 ```shell
-python new_parser.py <path_to_log_file>
+python otlpLogParser.py <path_to_log_file>
 ```
 
 Replace <path_to_log_file> with the path to your OpenTelemetry log file.
