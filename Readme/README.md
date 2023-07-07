@@ -4,6 +4,7 @@ This readme provides instructions on how to work with OpenTelemetry, a powerful 
 ## **OpenTelemetry Overview**
 OpenTelemetry is an open-source project that provides a set of APIs, libraries, agents, and instrumentation to enable observability in modern applications. It is designed to help developers and system operators to capture, generate, and export telemetry data, such as traces, metrics, and logs, from their applications and infrastructure. By collecting and analyzing telemetry data, developers can gain insights into the performance, behavior, and issues within their distributed systems.
 
+
 ### **Key Components of OpenTelemetry**:
 1. **Tracing**: OpenTelemetry's tracing component allows you to capture and visualize the flow of requests through your application. It generates traces, which are representations of the distributed execution of operations. Traces consist of spans, representing individual operations or actions, and they provide valuable information about the timing and dependencies of different components.
 
@@ -15,16 +16,17 @@ OpenTelemetry is an open-source project that provides a set of APIs, libraries, 
 
 5. **Exporters**: OpenTelemetry supports various exporters to send telemetry data to different monitoring and observability systems, such as Jaeger, Prometheus, Zipkin, and others. This flexibility enables you to integrate OpenTelemetry with your preferred monitoring tools.
 
-## **Installation**
+## **Running OpenTelemetry**
+### **Method 1: Using OpenTelemetry Java Agent**
+
+To run your Java application with OpenTelemetry and collect telemetry data using the OpenTelemetry Java agent, follow these steps:
+
 1. Download the OpenTelemetry Java jar file from the official website: https://opentelemetry.io/docs/instrumentation/java/automatic/
 2. Place the downloaded jar file inside your working directory.
 
-## **Running OpenTelemetry**
-To run your Java application with OpenTelemetry and collect telemetry data, follow these steps:
+3. Open your command line interface.
 
-1. Open your command line interface.
-
-2. Execute the following command, replacing **`path/to/opentelemetry-javaagent.jar`** with the actual path to the OpenTelemetry Java agent jar file, and **`your-service-name`** with the desired name for your service:
+4. Execute the following command, replacing **`path/to/opentelemetry-javaagent.jar`** with the actual path to the OpenTelemetry Java agent jar file, and **`your-service-name`** with the desired name for your service:
 
 ```shell
 java -javaagent:path/to/opentelemetry-javaagent.jar -Dotel.service.name=your-service-name --Dotel.traces.exporter=logging-otlp -Dotel.metrics.exporter=none -jar myapp.jar
@@ -37,6 +39,67 @@ If you want to log the output into a text file named **`traces.txt`**, append **
 java -javaagent:path/to/opentelemetry-javaagent.jar -Dotel.service.name=your-service-name --Dotel.traces.exporter=logging-otlp -Dotel.metrics.exporter=none -jar myapp.jar 2> traces.txt
 ```
 Now, the trace data will be logged to **`traces.txt`** in your working directory.
+
+
+### **Method 2: Using Docker and Docker Compose**
+To collect trace data using Docker and Docker Compose without manually installing OpenTelemetry, follow these steps:
+
+1. Create a **`Dockerfile`** in each microservice's directory with the following content:
+
+```shell
+FROM openjdk:17-jdk-slim
+WORKDIR /app
+COPY /target/*.jar main.jar
+ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar .
+ENV JAVA_TOOL_OPTIONS "-javaagent:./opentelemetry-javaagent.jar"
+CMD ["java", "-jar", "main.jar"]
+```
+
+The **`ADD`** command will download the latest OpenTelemetry Java agent JAR file from the specified URL and adds it to the Docker container.
+The **`ENV`** command sets the `JAVA_TOOL_OPTIONS` environment variable inside the Docker container, specifying the Java agent JAR file to be used for OpenTelemetry instrumentation.
+
+2. In your **`docker-compose.yml`** file, add the environment variables for each microservice:
+```shell
+services:
+  microservice1:
+    build:
+      context: ./microservice1
+      dockerfile: Dockerfile
+    environment:
+      - OTEL_SERVICE_NAME=your-service-name
+      - OTEL_TRACES_EXPORTER=logging-otlp
+      - OTEL_METRICS_EXPORTER=none
+  microservice2:
+    build:
+      context: ./microservice2
+      dockerfile: Dockerfile
+    environment:
+      - OTEL_SERVICE_NAME=your-service-name
+      - OTEL_TRACES_EXPORTER=logging-otlp
+      - OTEL_METRICS_EXPORTER=none
+  # Define more services...
+```
+
+Replace **`your-service-name`** with desired name of your services.
+
+3. Run the following command to start the Docker containers and collect trace data:
+
+```shell
+docker-compose up
+```
+By running docker-compose up, The containers run the commands defined in the Dockerfile, which include executing the Java application with the OpenTelemetry Java agent and the specified configuration and collect the trace data without manually installing the OpenTelemetry Java agent.
+
+The trace data will be logged to the standard output (stdout).
+
+4. If you want to log the output into a text file named **`traces.txt`**, append **`2> traces.txt`** to the command:
+
+```shell
+docker-compose up 2> traces.txt
+```
+
+Now, the trace data will be logged to **`traces.txt`** in your docker-compose directory.
+
+
 
 ## **Parsing and Refining Trace Data**
 To parse and refine the trace data logged by OpenTelemetry, you can use the **`otlpLogParser.py`** Python script available at https://github.com/viraj0704/OpenTelemetryLogParser. This script converts the log file into a JSON representation of the trace data.
@@ -56,6 +119,8 @@ The OTLP Log Parser (**`otlpLogParser.py`**) is a Python script designed to pars
 5. **Error Logs**: The parser identifies and displays error logs, making it easier to spot potential issues and troubleshoot problems.
 
 6. **Sorting Spans**: The parser sorts spans based on their starting time, which can be helpful for visualizing the chronological order of operations.
+
+7. **Selective Processing**: The parser processes only the lines that contain OpenTelemetry log data, allowing for efficient extraction of relevant information. Other log data lines are ignored.
 
 **Steps to Use the OTLP Log Parser:**
 
