@@ -3,6 +3,7 @@ import json
 import argparse
 
 def convert_to_json(log_data):
+    log_check1 = log_data.find("otel.javaagent")
     log_start = log_data.find('{')
     if(log_start == -1 ):
         return (-1,-1)
@@ -149,9 +150,30 @@ def save_json_file(json_data, file_name):
         json.dump(json_data, file, indent=4)
 
 def process_log_data(file_name):
+    prev_data = ""
+    prev_skip = ""
+    complete = True
     with open(file_name, 'r') as file:
         for log_data in file:
             # log_data = file.readline()
+            log_check1 = log_data.find("otel.javaagent")
+            log_check2 = log_data.find("schemaUrl")
+            flag = 0
+            if(log_check1 != -1 and log_check2 != -1):
+                pass
+            elif(log_check1 == -1 and log_check2 == -1):
+                if(complete == False):
+                    prev_data += (log_data[len(prev_skip):]).rstrip()
+                continue
+            elif(log_check1 != -1 and log_check2 == -1):
+                complete = False
+                prev_data = (log_data[log_check1-1:]).rstrip()
+                prev_skip = log_data[:log_check1-1]
+                continue
+            else:
+                curr_data = log_data[len(prev_skip):]
+                log_data = prev_data + curr_data
+
             trace_id, log_dict = convert_to_json(log_data)
             if(trace_id == -1):
                 continue
