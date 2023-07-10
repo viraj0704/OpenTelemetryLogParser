@@ -1,9 +1,10 @@
 import os
 import json
 import argparse
+import shutil
+import time
 
 def convert_to_json(log_data):
-    log_check1 = log_data.find("otel.javaagent")
     log_start = log_data.find('{')
     if(log_start == -1 ):
         return (-1,-1)
@@ -153,6 +154,7 @@ def process_log_data(file_name):
     prev_data = ""
     prev_skip = ""
     complete = True
+    services_traceId = {}
     with open(file_name, 'r') as file:
         for log_data in file:
             # log_data = file.readline()
@@ -177,10 +179,11 @@ def process_log_data(file_name):
             trace_id, log_dict = convert_to_json(log_data)
             if(trace_id == -1):
                 continue
-            print(trace_id)
+            # print(trace_id)
             # print(log_dict)
             file_name = f"{trace_id}.json"
-
+            file_name = "All/" + file_name
+            
             if os.path.isfile(file_name):
                 # JSON file with the same name exists, update it
                 json_data = load_json_file(file_name)
@@ -195,7 +198,11 @@ def process_log_data(file_name):
                         flag = True
                         break
                 
-
+                service_name = log_dict['data'][0]['processes']['p1']['serviceName']
+                if service_name not in services_traceId.keys():
+                    services_traceId[service_name] = [trace_id]
+                else:
+                    services_traceId[service_name].append(f"{trace_id}")
                 if (flag == False):
 
                     new_process_id = 'p' + str(int(last_process_id[1:]) + 1)
@@ -220,6 +227,11 @@ def process_log_data(file_name):
                 
             else:
                 # JSON file doesn't exist, create a new one
+                service_name = log_dict['data'][0]['processes']['p1']['serviceName']
+                if service_name not in services_traceId.keys():
+                    services_traceId[service_name] = [trace_id]
+                else:
+                    services_traceId[service_name].append(f"{trace_id}")
                 spans = log_dict['data'][0]['spans']
                 
                 json_data = {
@@ -237,6 +249,9 @@ def process_log_data(file_name):
                 json_data['data'][0]['spans'] = sorted(json_data['data'][0]['spans'], key=lambda x: x['startTime'])
                 # Save the JSON file
                 save_json_file(json_data, file_name)
+    
+        return services_traceId
+            
         
         
 
@@ -252,7 +267,35 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Get the file path from the arguments
-    file_path = args.file
-    
-    process_log_data(file_path)
+    dir_path = args.file
 
+    service_dict = {}
+    if(os.path.isdir("All") == False):
+        os.mkdir('All')
+
+    for f in os.listdir("All"):
+        os.remove(os.path.join("All", f))
+
+    with open("maps.txt","w") as f:
+        f.close()
+
+    for file_name in os.listdir(dir_path):
+        if file_name.endswith('.txt') or file_name.endswith('.log'):
+            file_path = os.path.join(dir_path,file_name)
+            # print(file_name)
+            service_traceId = process_log_data(file_path)
+            with open("maps.txt","a") as f:
+                for key, value in service_traceId.items():
+                    service_dict[key] = value
+                    # print(f"---{key}---")
+                    f.write(f'{key} -> {value}\n')
+            f.close()
+
+    for key, values in service_dict.items():
+        if(os.path.isdir(key)):
+                for f in os.listdir(key):
+                    os.remove(os.path.join(key, f))
+        else:
+            os.mkdir(key)
+        for value in values:
+            shutil.copy2(f"All/{value}.json",f"{key}/")
