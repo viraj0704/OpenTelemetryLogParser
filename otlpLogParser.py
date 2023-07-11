@@ -7,7 +7,7 @@ import time
 def convert_to_json(log_data):
     log_start = log_data.find('{')
     if(log_start == -1 ):
-        return (-1,-1)
+        return {-1:""}
     log_json = log_data[log_start:]
     
     log_dict = json.loads(log_json)
@@ -32,14 +32,12 @@ def convert_to_json(log_data):
             'type': attr_type,
             'value': value
         }
-
-    # logs_info = log_dict['scopeSpans']
     
-    trace_id = log_dict['scopeSpans'][0]['spans'][0]['traceId']
-    spans = []
+    trace_ids = {}
 
     for scope_span in log_dict['scopeSpans']:
         for span in scope_span['spans']:
+
             span_data = {
                 'traceID': span['traceId'],
                 'spanID': span['spanId'],
@@ -110,36 +108,39 @@ def convert_to_json(log_data):
                             'value': field_value                            
                         })
                     span_data['logs'].append(logs_data)
+            if span['traceId'] in trace_ids:
+                trace_ids[span['traceId']].append(span_data)
+            else:
+                trace_ids[span['traceId']] = [span_data]
 
 
-
-
-            spans.append(span_data)
-
-    json_data = {
-        'data': [
-            {
-                'traceID': trace_id,
-                'spans': spans,
-                'processes': {
-                    'p1': {
-                        'serviceName': process_info.get('service.name', {}).get('value', ''),
-                        'tags': [
-                            {
-                                'key': attr_key,
-                                'type': process_info[attr_key]['type'],
-                                'value': process_info[attr_key]['value']
-                            }
-                            for attr_key in process_info.keys()
-                        ]
+    trace_ids_json_data = {}
+    for trace_id,spans in trace_ids.items():
+        json_data = {
+            'data': [
+                {
+                    'traceID': trace_id,
+                    'spans': spans,
+                    'processes': {
+                        'p1': {
+                            'serviceName': process_info.get('service.name', {}).get('value', ''),
+                            'tags': [
+                                {
+                                    'key': attr_key,
+                                    'type': process_info[attr_key]['type'],
+                                    'value': process_info[attr_key]['value']
+                                }
+                                for attr_key in process_info.keys()
+                            ]
+                        }
                     }
                 }
-            }
-        ],
-        
-    }
+            ],
+        }
 
-    return (trace_id,json_data)
+        trace_ids_json_data[trace_id] = json_data
+
+    return (trace_ids_json_data)
 
 def load_json_file(file_name):
     with open(file_name, 'r') as file:
@@ -157,7 +158,6 @@ def process_log_data(file_name):
     services_traceId = {}
     with open(file_name, 'r') as file:
         for log_data in file:
-            # log_data = file.readline()
             log_check1 = log_data.find("otel.javaagent")
             log_check2 = log_data.find("schemaUrl")
             flag = 0
@@ -176,79 +176,80 @@ def process_log_data(file_name):
                 curr_data = log_data[len(prev_skip):]
                 log_data = prev_data + curr_data
 
-            trace_id, log_dict = convert_to_json(log_data)
-            if(trace_id == -1):
-                continue
-            # print(trace_id)
-            # print(log_dict)
-            file_name = f"{trace_id}.json"
-            file_name = "All/" + file_name
-            
-            if os.path.isfile(file_name):
-                # JSON file with the same name exists, update it
-                json_data = load_json_file(file_name)
-
+            trace_id_json_data = convert_to_json(log_data)
+            for trace_id,log_dict in trace_id_json_data.items():
+                if(trace_id == -1):
+                    continue
+                # print(trace_id)
+                # print(log_dict)
+                file_name = f"{trace_id}.json"
+                file_name = "All/" + file_name
                 
-                # Find the last processID and increment it
-                process_ids = list(json_data['data'][0]['processes'].keys())
-                last_process_id = process_ids[-1] if process_ids else 'p0'
-                flag = False
-                for process_id in process_ids:
-                    if json_data['data'][0]['processes'][process_id]['serviceName'] == log_dict['data'][0]['processes']['p1']['serviceName'] :
-                        flag = True
-                        break
-                
-                service_name = log_dict['data'][0]['processes']['p1']['serviceName']
-                if service_name not in services_traceId.keys():
-                    services_traceId[service_name] = [trace_id]
-                else:
-                    services_traceId[service_name].append(f"{trace_id}")
-                if (flag == False):
+                if os.path.isfile(file_name):
+                    # JSON file with the same name exists, update it
+                    json_data = load_json_file(file_name)
 
-                    new_process_id = 'p' + str(int(last_process_id[1:]) + 1)
-
-                    # Add span data with new processID
-                    spans = log_dict['data'][0]['spans']
-                    # print(spans)
-                    for span_data in spans:
-                        span_data['processID'] = new_process_id
-
-                    json_data['data'][0]['spans'].extend(spans)
-
-                    # Extract process info from log_data
-                    process_info = log_dict['data'][0]['processes']['p1']
-
-                    # Add process_info to the process
-                    json_data['data'][0]['processes'][new_process_id] = process_info
-
-                    # Save the updated JSON file
-                    json_data['data'][0]['spans'] = sorted(json_data['data'][0]['spans'], key=lambda x: x['startTime'])
-                    save_json_file(json_data, file_name)
-                
-            else:
-                # JSON file doesn't exist, create a new one
-                service_name = log_dict['data'][0]['processes']['p1']['serviceName']
-                if service_name not in services_traceId.keys():
-                    services_traceId[service_name] = [trace_id]
-                else:
-                    services_traceId[service_name].append(f"{trace_id}")
-                spans = log_dict['data'][0]['spans']
-                
-                json_data = {
-                    'data': [
-                        {
-                            'traceID': trace_id,
-                            'spans': spans,
-                            'processes': {
-                                'p1': log_dict['data'][0]['processes']['p1']
-                            }
-                        }
-                    ],
                     
-                }
-                json_data['data'][0]['spans'] = sorted(json_data['data'][0]['spans'], key=lambda x: x['startTime'])
-                # Save the JSON file
-                save_json_file(json_data, file_name)
+                    # Find the last processID and increment it
+                    process_ids = list(json_data['data'][0]['processes'].keys())
+                    last_process_id = process_ids[-1] if process_ids else 'p0'
+                    flag = False
+                    for process_id in process_ids:
+                        if json_data['data'][0]['processes'][process_id]['serviceName'] == log_dict['data'][0]['processes']['p1']['serviceName'] :
+                            flag = True
+                            break
+                    
+                    service_name = log_dict['data'][0]['processes']['p1']['serviceName']
+                    if service_name not in services_traceId.keys():
+                        services_traceId[service_name] = [trace_id]
+                    else:
+                        services_traceId[service_name].append(f"{trace_id}")
+                    if (flag == False):
+
+                        new_process_id = 'p' + str(int(last_process_id[1:]) + 1)
+
+                        # Add span data with new processID
+                        spans = log_dict['data'][0]['spans']
+                        # print(spans)
+                        for span_data in spans:
+                            span_data['processID'] = new_process_id
+
+                        json_data['data'][0]['spans'].extend(spans)
+
+                        # Extract process info from log_data
+                        process_info = log_dict['data'][0]['processes']['p1']
+
+                        # Add process_info to the process
+                        json_data['data'][0]['processes'][new_process_id] = process_info
+
+                        # Save the updated JSON file
+                        json_data['data'][0]['spans'] = sorted(json_data['data'][0]['spans'], key=lambda x: x['startTime'])
+                        save_json_file(json_data, file_name)
+                    
+                else:
+                    # JSON file doesn't exist, create a new one
+                    service_name = log_dict['data'][0]['processes']['p1']['serviceName']
+                    if service_name not in services_traceId.keys():
+                        services_traceId[service_name] = [trace_id]
+                    else:
+                        services_traceId[service_name].append(f"{trace_id}")
+                    spans = log_dict['data'][0]['spans']
+                    
+                    json_data = {
+                        'data': [
+                            {
+                                'traceID': trace_id,
+                                'spans': spans,
+                                'processes': {
+                                    'p1': log_dict['data'][0]['processes']['p1']
+                                }
+                            }
+                        ],
+                        
+                    }
+                    json_data['data'][0]['spans'] = sorted(json_data['data'][0]['spans'], key=lambda x: x['startTime'])
+                    # Save the JSON file
+                    save_json_file(json_data, file_name)
     
         return services_traceId
             
@@ -282,7 +283,6 @@ if __name__ == '__main__':
     for file_name in os.listdir(dir_path):
         if file_name.endswith('.txt') or file_name.endswith('.log'):
             file_path = os.path.join(dir_path,file_name)
-            # print(file_name)
             service_traceId = process_log_data(file_path)
             with open("maps.txt","a") as f:
                 for key, value in service_traceId.items():
