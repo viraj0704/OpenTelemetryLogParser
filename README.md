@@ -27,10 +27,20 @@ OpenTelemetryLogParser is a log parsing utility for OpenTelemetry logs. It allow
 Run the following command to execute the log parser and generate a JSON file based on trace IDs:
 
 ```shell
-python otlpLogParser.py <path_to_folder>
+python otlpLogParser.py -dir <path_to_folder>
+```
+Replace <path_to_folder> with the path to your folder containing all the OpenTelemetry log file.
+
+**OR**
+```shell
+python otlpLogParser.py -file <path_to_file>
 ```
 
-Replace <path_to_folder> with the path to your folder containing all the OpenTelemetry log file.
+
+
+
+Replace <path_to_file> with the path to your OpenTelemetry log file.
+
 
 The tool will parse the log file, extract trace IDs, and merge spans from different services with the same trace ID. The generated JSON file will contain the trace IDs and their corresponding spans. Directory of a particular service will have traces which contain spans of that directory. All the traces will be saved to "All" directory.
 
